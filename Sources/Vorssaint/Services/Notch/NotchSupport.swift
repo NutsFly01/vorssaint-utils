@@ -7,7 +7,7 @@ import Foundation
 import CoreGraphics
 
 enum NotchModule: String, CaseIterable, Identifiable {
-    case controls, mixer, music, clipboard, captures, files, system, tools, calendar, notifications, timer, camera, downloads, scratchpad, agents, watch
+    case controls, mixer, music, clipboard, captures, files, system, batteries, tools, calendar, notifications, timer, camera, downloads, scratchpad, agents, watch
     var id: String { rawValue }
 
     var symbol: String {
@@ -26,6 +26,7 @@ enum NotchModule: String, CaseIterable, Identifiable {
         case .captures: return "camera.viewfinder"
         case .files: return "tray.full"
         case .system: return "gauge.with.dots.needle.50percent"
+        case .batteries: return "battery.100percent"
         // The quick panel's own mark; the grid belongs to the sections button.
         case .tools: return AppFeature.quickLauncher.symbolName
         case .scratchpad: return "note.text"
@@ -44,6 +45,7 @@ enum NotchModule: String, CaseIterable, Identifiable {
         case .captures: return "s"
         case .files: return "f"
         case .system: return "i"
+        case .batteries: return "e"
         case .tools: return "t"
         case .calendar: return "a"
         case .notifications: return "n"
@@ -76,6 +78,7 @@ enum NotchModule: String, CaseIterable, Identifiable {
         case .scratchpad: return AppFeature.scratchpad.isAvailable(in: defaults)
         case .agents: return AppFeature.notchAgents.isAvailable(in: defaults)
         case .watch: return AppFeature.notchWatch.isAvailable(in: defaults)
+        case .batteries: return AppFeature.monitorPower.isAvailable(in: defaults)
         case .system:
             return [.monitorCPU, .monitorGPU, .monitorMemory, .monitorNetwork,
                     .monitorDisk, .monitorPower, .fanControl, .connectedDevices].contains { (feature: AppFeature) in
@@ -211,7 +214,7 @@ extension NotchModule {
     var pageTop: NotchPageTop {
         switch self {
         case .music: return .wrapsCamera
-        case .system: return .none
+        case .system, .batteries: return .none
         default: return .row
         }
     }
@@ -2714,7 +2717,7 @@ struct NotchGeometry: Equatable {
                       detailHeight: CGFloat? = nil, shortcutCount: Int = 4,
                       sliderCount: Int = 2, controlsHaveMusic: Bool = true, musicHasContent: Bool = true,
                       musicExtraHeight: CGFloat = 0,
-                      fileMediaHeight: CGFloat? = nil, systemCards: Int = 6, toolCount: Int? = 8,
+                      fileMediaHeight: CGFloat? = nil, systemCards: Int = 6, batteryCards: Int = 2, toolCount: Int? = 8,
                       capturePreviewHeight: CGFloat? = nil,
                       timerHasSession: Bool = false, timerMode: NotchTimerMode = .timer,
                       agentsHeight: CGFloat? = nil) -> CGSize {
@@ -2751,8 +2754,8 @@ struct NotchGeometry: Equatable {
             case .music:
                 let player = NotchLayout.musicPlayerHeight(band: musicBandHeight, playing: musicHasContent)
                 contentHeight = min(budget, player) + max(0, musicExtraHeight)
-            case .system:
-                let cards = max(0, systemCards)
+            case .system, .batteries:
+                let cards = max(0, module == .system ? systemCards : batteryCards)
                 contentHeight = min(budget, cards == 0 ? NotchLayout.emptyHeight
                     : NotchLayout.railHeight(rows: systemRows(cards: cards), rowHeight: NotchLayout.systemCardHeight, spacing: NotchLayout.rowSpacing)
                         + NotchLayout.systemHoverInset(width: contentWidth) * 2)

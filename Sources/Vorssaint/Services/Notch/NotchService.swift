@@ -839,6 +839,8 @@ final class NotchService: ObservableObject {
                                      musicExtraHeight: musicExtraHeight, fileMediaHeight: fileMediaHeight,
                                      systemCards: NotchSupport.systemCardCount(hasBattery: PowerSampler.hasInternalBattery,
                                                                                fans: SystemMonitor.shared.snapshot.fanSpeeds.count),
+                                     batteryCards: NotchAccessorySupport.pageCardCount(hasBattery: PowerSampler.hasInternalBattery,
+                                                                                       devices: SystemMonitor.shared.snapshot.peripheralBatteries),
                                      toolCount: toolCount, capturePreviewHeight: capturePreviewHeight,
                                      timerHasSession: NotchTimerService.shared.session.hasSession,
                                      timerMode: NotchTimerService.shared.session.hasSession
@@ -2331,7 +2333,8 @@ final class NotchService: ObservableObject {
             return
         }
         open(selectedNotice.event == .download ? .downloads : selectedNotice.event == .timer ? .timer
-             : selectedNotice.event == .accessory ? .system : selectedNotice.event == .systemNotification ? .notifications
+             : selectedNotice.event == .accessory ? (modules.contains(.batteries) ? .batteries : .system)
+             : selectedNotice.event == .systemNotification ? .notifications
              : selectedNotice.event == .clipboard ? .clipboard : selectedNotice.event == .agents ? .agents
              : selectedNotice.event == .track ? .music : selectedNotice.event == .microphone ? .mixer
              : selectedNotice.event == .watch ? .watch : .controls)
@@ -3982,6 +3985,18 @@ final class NotchService: ObservableObject {
                     self.refreshPresentation()
                 }.store(in: &subscriptions)
         }
+        if modules.contains(.batteries) {
+            // Accessories arrive after the page opens and come and go with
+            // their connections; the page grows or shrinks its rows with them.
+            SystemMonitor.shared.$snapshot.map { NotchAccessorySupport.pageDevices($0.peripheralBatteries).count }
+                .removeDuplicates().dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    guard let self, self.expanded, self.selected == .batteries,
+                          !self.showingAppPanel, !self.showingSections else { return }
+                    self.refreshPresentation()
+                }.store(in: &subscriptions)
+        }
         if NotchSupport.routes(.download) {
             NotchDownloadService.shared.$items.receive(on: DispatchQueue.main).sink { [weak self] _ in
                 self?.syncMenuSpaceMonitoring()
@@ -4303,6 +4318,11 @@ final class NotchService: ObservableObject {
         if needs, AppFeature.monitorDisk.isAvailable { detailNeeds.disk = true }
         if needs, AppFeature.fanControl.isAvailable { detailNeeds.fanSpeed = true }
         if needs, AppFeature.connectedDevices.isAvailable { detailNeeds.connectedDevices = true }
+        if expanded, selected == .batteries, modules.contains(.batteries), !showingAppPanel, !showingSections,
+           !showingCommandBar {
+            detailNeeds.peripheralBattery = true
+            if PowerSampler.hasInternalBattery { detailNeeds.power = true }
+        }
         SystemMonitor.shared.setNotchDetailNeeds(detailNeeds)
         if needs != notchNeedsMonitor {
             notchNeedsMonitor = needs

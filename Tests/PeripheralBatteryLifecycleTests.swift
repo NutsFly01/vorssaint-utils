@@ -24,6 +24,7 @@ enum PeripheralBatteryLifecycleTests {
     static func run(_ suite: TestSuite) {
         freshness(suite)
         cachedSources(suite)
+        pageRefresh(suite)
         refreshHandoff(suite)
         cancellation(suite)
         cancelledProfiler(suite)
@@ -106,6 +107,40 @@ enum PeripheralBatteryLifecycleTests {
         clock = 303
         suite.expect(sampler.sample(now: clock).observedAt == actual.observedAt,
                "the fast cache preserves source timestamps exactly")
+    }
+
+    /// Opening the Batteries page reads Bluetooth again before the five-minute
+    /// interval, but not on every opening and not over a read in progress.
+    private static func pageRefresh(_ suite: TestSuite) {
+        let queue = DispatchQueue(label: "com.vorssaint.tests.battery-page")
+        var clock: TimeInterval = 1
+        var readers: [Reader] = [] // Access only while the serial queue is drained or inside it.
+        let sampler = PeripheralBatterySampler(bluetoothQueue: queue, readFast: { [] },
+            readProfiler: { _ in Data() }, makeBluetoothRead: { _, cancellation, completion in
+                let reader = Reader(cancellation: cancellation, completion: completion)
+                readers.append(reader)
+                return reader
+            }, currentTime: { clock })
+        defer { sampler.setEnabled(false); queue.sync {} }
+        sampler.setEnabled(true)
+        _ = sampler.sample(now: clock)
+        queue.sync { readers[0].emit(35) }
+        clock = 10
+        sampler.expireBluetoothReadings(olderThan: 20)
+        _ = sampler.sample(now: clock)
+        suite.expect(queue.sync { readers.count } == 1, "reopening the page at once reuses the reading just taken")
+        clock = 30
+        sampler.expireBluetoothReadings(olderThan: 20)
+        _ = sampler.sample(now: clock)
+        suite.expect(queue.sync { readers.count } == 2,
+                     "the page reads Bluetooth again long before the refresh interval")
+        clock = 60
+        sampler.expireBluetoothReadings(olderThan: 20)
+        _ = sampler.sample(now: clock)
+        suite.expect(queue.sync { readers.count } == 2, "a read in progress is not started again")
+        queue.sync { readers[1].emit(80) }
+        suite.expect(sampler.sample(now: clock).devices.first?.percent == 80,
+                     "the page's read replaces the cached percentage")
     }
 
     /// A finished Bluetooth refresh tells the monitor to read at once, and

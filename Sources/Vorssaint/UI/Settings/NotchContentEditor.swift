@@ -42,9 +42,9 @@ struct NotchIslandPreview: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(editor.preview)
             .accessibilityValue(module.title(l10n.language) + (hidden ? ", " + editor.hiddenInIsland : ""))
-            .onAppear { monitor(windowVisible && module == .system) }
-            .onChange(of: module) { _, value in monitor(windowVisible && value == .system) }
-            .onChange(of: windowVisible) { _, visible in monitor(visible && module == .system) }
+            .onAppear { monitor(windowVisible && module.readsMonitor) }
+            .onChange(of: module) { _, value in monitor(windowVisible && value.readsMonitor) }
+            .onChange(of: windowVisible) { _, visible in monitor(visible && module.readsMonitor) }
             .onDisappear { monitor(false) }
     }
 
@@ -167,6 +167,7 @@ struct NotchPagePreview: View {
             RecentCapturesView(onClose: nil, notchSize: size).notchBand(trailing: { NotchClearCapturesButton() })
         case .files: NotchFilesView(service: notch)
         case .system: NotchSystemView(size: size) { _ in }
+        case .batteries: NotchBatteriesView(size: size)
         case .tools: QuickLauncherView(notchSize: size)
         case .scratchpad: NotchScratchpadStill()
         case .agents:
@@ -397,6 +398,7 @@ extension NotchModule {
         case .captures: return .indigo
         case .files: return .cyan
         case .system: return .green
+        case .batteries: return Color(red: 0.2, green: 0.72, blue: 0.36)
         case .tools: return .gray
         case .calendar: return .red
         case .notifications: return .orange
@@ -410,4 +412,7 @@ extension NotchModule {
     }
 
     var settingsGlyph: Color { self == .scratchpad ? .black.opacity(0.75) : .white }
+
+    /// Pages whose preview shows the monitor's readings.
+    var readsMonitor: Bool { self == .system || self == .batteries }
 }

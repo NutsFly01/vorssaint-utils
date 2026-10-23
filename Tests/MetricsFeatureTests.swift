@@ -452,8 +452,30 @@ enum MetricsFeatureTests {
         suite.expect(bluetoothDevices.contains(PeripheralBatteryDevice(id: "Bluetooth:E5:04:BE:68:C2:93",
                                                                  name: "AirPods Pro",
                                                                  percent: 88,
-                                                                 kind: .audio)),
-               "peripheral battery uses the lowest connected AirPods component")
+                                                                 kind: .audio,
+                                                                 parts: [.init(position: .left, percent: 92),
+                                                                         .init(position: .right, percent: 90),
+                                                                         .init(position: .chargingCase, percent: 88)])),
+               "peripheral battery uses the lowest connected AirPods component and keeps each one")
+        // AirPods connected only over Low Energy: that entry has no product ID,
+        // the classic one of the same name does, with a French percent format.
+        let lowEnergyJSON = Data("""
+        {"SPBluetoothDataType":[{"device_connected":[
+          {"AirPods Pro":{"device_batteryLevelLeft":"100\\u00a0%","device_batteryLevelRight":"99\\u00a0%"}}
+        ],"device_not_connected":[
+          {"AirPods Pro":{"device_address":"2C:32:6A:C9:E2:AB","device_productID":"0x2014","device_vendorID":"0x004C"}},
+          {"Other Buds":{"device_productID":"0x2011","device_vendorID":"0x0A12"}}
+        ]}]}
+        """.utf8)
+        let lowEnergy = PeripheralBatterySupport.bluetoothDevices(fromSystemProfilerJSON: lowEnergyJSON)
+        suite.expect(lowEnergy.count == 1 && lowEnergy.first?.productID == 0x2014 && lowEnergy.first?.percent == 99
+                     && lowEnergy.first?.parts.map(\.position) == [.left, .right],
+                     "a Low Energy AirPods entry takes its model from the classic entry and reports only the sides it has")
+        suite.expect(PeripheralBatterySupport.appleProductID(in: ["device_productID": "0x2011", "device_vendorID": "0x0A12"]) == nil,
+                     "another vendor's product ID cannot name an Apple model")
+        suite.expect(PeripheralBatterySupport.kind(product: "Powerbeats Pro", primaryUsagePage: nil, primaryUsage: nil,
+                                                   usagePairs: []) == .audio,
+                     "Beats earphones are audio accessories even without a Bluetooth class")
         suite.expect(!bluetoothDevices.contains { $0.name == "Old Mouse" },
                "peripheral battery ignores disconnected Bluetooth devices")
         let bluetoothKinds = PeripheralBatterySupport.bluetoothKindsByName(

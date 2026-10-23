@@ -31,6 +31,21 @@ enum NotchTests {
         suite.expect(!NotchModule.system.isAvailable(in: defaults)
                      && NotchSupport.systemCardCount(hasBattery: false, in: defaults) == 0,
                      "uninstalling connected devices removes its System page and card")
+        suite.expect(!NotchModule.batteries.isAvailable(in: defaults), "Batteries stays unavailable without the power monitor")
+        defaults.set(true, forKey: AppFeature.monitorPower.availabilityKey)
+        suite.expect(NotchModule.batteries.isAvailable(in: defaults), "the power monitor makes the Batteries page reachable")
+        defaults.set(false, forKey: AppFeature.monitorPower.availabilityKey)
+        let accessories = [
+            PeripheralBatteryDevice(id: "pods", name: "AirPods Pro", percent: 64, kind: .audio),
+            PeripheralBatteryDevice(id: "mouse", name: "Magic Mouse", percent: 12, kind: .mouse),
+            PeripheralBatteryDevice(id: "unread", name: "Speaker", percent: -1, kind: .device),
+            PeripheralBatteryDevice(id: "keyboard", name: "Magic Keyboard", percent: 80, kind: .keyboard),
+        ]
+        suite.expect(NotchAccessorySupport.pageDevices(accessories).map(\.id) == ["mouse", "pods", "keyboard"],
+                     "Batteries lists the lowest accessory first, without readings it cannot trust")
+        suite.expect(NotchAccessorySupport.pageCardCount(hasBattery: true, devices: accessories) == 4
+                     && NotchAccessorySupport.pageCardCount(hasBattery: false, devices: []) == 0,
+                     "a laptop's own battery leads the accessories on the page")
 
         suite.expect(NotchLayout.systemRowRanges(count: 7, width: 504) == [0..<3, 3..<5, 5..<7],
                      "seven System metrics fill balanced rows instead of leaving a nearly empty column")
@@ -2441,7 +2456,7 @@ enum NotchTests {
         suite.expect(!NotchSupport.routes(.clipboard, in: defaults), "hidden module cannot leak an activity")
         defaults.set("system,music,music,unknown", forKey: DefaultsKey.notchModuleOrder)
         defaults.set(true, forKey: DefaultsKey.notchAgentsEnabled)
-        suite.expect(NotchSupport.modules(in: defaults) == [.system, .music, .controls, .mixer, .captures, .files, .tools, .calendar, .notifications, .timer, .camera, .downloads, .scratchpad, .agents, .watch],
+        suite.expect(NotchSupport.modules(in: defaults) == [.system, .music, .controls, .mixer, .captures, .files, .batteries, .tools, .calendar, .notifications, .timer, .camera, .downloads, .scratchpad, .agents, .watch],
                "module order ignores unknown ids and duplicates, preserving newly added modules")
         suite.expect(NotchSupport.routesShelf(in: defaults) && NotchSupport.revealsShelfDrag(in: defaults),
                "the enabled notch replaces the file destination and reveals active drags")

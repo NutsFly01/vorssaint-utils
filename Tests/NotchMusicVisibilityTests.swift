@@ -22,6 +22,8 @@ enum NotchMusicVisibilityTests {
         var disk = false
         var fanSpeed = false
         var connectedDevices = false
+        var peripheralBattery = false
+        var power = false
         static let none = Self()
     }
     struct Metric { let monitorNeeds = MonitorNeeds.none }
@@ -181,6 +183,30 @@ enum NotchMusicVisibilityTests {
         devices.releaseMonitor()
         suite.expect(!SystemMonitor.shared.detailNeeds.connectedDevices,
                      "releasing the island stops its connected device sampling demand")
+
+        let batteries = Service()
+        batteries.modules = [.system, .batteries]
+        for page in [NotchModule.batteries, .system] {
+            for expanded in [true, false] {
+                for showingSections in [true, false] {
+                    batteries.selected = page
+                    batteries.expanded = expanded
+                    batteries.showingSections = showingSections
+                    batteries.syncVisibleConsumers()
+                    let shown = page == .batteries && expanded && !showingSections
+                    suite.expect(SystemMonitor.shared.detailNeeds.peripheralBattery == shown
+                                 && SystemMonitor.shared.detailNeeds.power == shown,
+                                 "accessory and Mac batteries are read while the Batteries page shows them")
+                }
+            }
+        }
+        batteries.selected = .batteries
+        batteries.expanded = true
+        batteries.showingSections = false
+        batteries.syncVisibleConsumers()
+        batteries.releaseMonitor()
+        suite.expect(!SystemMonitor.shared.detailNeeds.peripheralBattery,
+                     "releasing the island stops its accessory battery sampling demand")
 
         let persistentCapture = Service()
         var persistentCloseCount = 0

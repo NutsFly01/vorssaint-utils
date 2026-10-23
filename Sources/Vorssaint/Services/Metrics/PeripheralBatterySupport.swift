@@ -21,11 +21,23 @@ enum PeripheralBatteryKind: String, Comparable {
     }
 }
 
+/// Earbuds report each side and their case apart. The device's own
+/// percentage stays the lowest of them, for alerts and the menu bar.
+struct PeripheralBatteryPart: Equatable {
+    enum Position: String, CaseIterable { case left, right, chargingCase }
+    let position: Position
+    let percent: Int
+}
+
 struct PeripheralBatteryDevice: Identifiable, Equatable {
     let id: String
     let name: String
     let percent: Int
     let kind: PeripheralBatteryKind
+    var parts: [PeripheralBatteryPart] = []
+    /// Apple's Bluetooth product ID, which still names the model once the
+    /// accessory is renamed.
+    var productID: Int? = nil
 }
 
 struct BluetoothBatteryReading: Equatable {
@@ -154,7 +166,9 @@ enum PeripheralBatterySupport {
         if normalized.contains("mouse") { return .mouse }
         if normalized.contains("trackpad") || normalized.contains("track pad") { return .trackpad }
         if normalized.contains("airpods")
+            || normalized.contains("beats")
             || normalized.contains("headphone")
+            || normalized.contains("earphone")
             || normalized.contains("headset")
             || normalized.contains("buds") {
             return .audio
@@ -194,6 +208,13 @@ enum PeripheralBatterySupport {
     }
 
     static func bluetoothDevices(fromSystemProfilerJSON data: Data) -> [PeripheralBatteryDevice] {
+        // AirPods can be connected through their Low Energy entry alone, which
+        // carries no product ID; the classic entry of the same name does.
+        var productIDs: [String: Int] = [:]
+        for (name, properties) in bluetoothEntries(from: data, lists: ["device_connected", "device_not_connected"]) {
+            let key = normalizedBluetoothName(name)
+            if productIDs[key] == nil, let productID = appleProductID(in: properties) { productIDs[key] = productID }
+        }
         var devices: [PeripheralBatteryDevice] = []
         for (name, properties) in connectedBluetoothEntries(from: data) {
             guard let percent = bluetoothPercent(in: properties) else { continue }
@@ -209,7 +230,10 @@ enum PeripheralBatterySupport {
             devices.append(PeripheralBatteryDevice(id: id,
                                                    name: name,
                                                    percent: percent,
-                                                   kind: kind))
+                                                   kind: kind,
+                                                   parts: bluetoothParts(in: properties),
+                                                   productID: appleProductID(in: properties)
+                                                       ?? productIDs[normalizedBluetoothName(name)]))
         }
         return sorted(devices)
     }
@@ -257,6 +281,10 @@ enum PeripheralBatterySupport {
     }
 
     private static func connectedBluetoothEntries(from data: Data) -> [(String, [String: Any])] {
+        bluetoothEntries(from: data, lists: ["device_connected"])
+    }
+
+    private static func bluetoothEntries(from data: Data, lists: [String]) -> [(String, [String: Any])] {
         guard !data.isEmpty,
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let controllers = root["SPBluetoothDataType"] as? [Any] else {
@@ -265,11 +293,8 @@ enum PeripheralBatterySupport {
 
         var entries: [(String, [String: Any])] = []
         for controllerValue in controllers {
-            guard let controller = dictionary(from: controllerValue),
-                  let connected = controller["device_connected"] as? [Any] else {
-                continue
-            }
-            for entryValue in connected {
+            guard let controller = dictionary(from: controllerValue) else { continue }
+            for entryValue in lists.flatMap({ controller[$0] as? [Any] ?? [] }) {
                 guard let entry = dictionary(from: entryValue) else { continue }
                 for (name, propertiesValue) in entry {
                     guard let properties = dictionary(from: propertiesValue) else { continue }
@@ -302,6 +327,28 @@ enum PeripheralBatterySupport {
             .filter { key, _ in key.hasPrefix("device_batteryLevel") && !knownKeys.contains(key) }
             .compactMap { percent(from: $0.value) }
         return values.min()
+    }
+
+    private static func bluetoothParts(in properties: [String: Any]) -> [PeripheralBatteryPart] {
+        let keys: [(String, PeripheralBatteryPart.Position)] = [
+            ("device_batteryLevelLeft", .left),
+            ("device_batteryLevelRight", .right),
+            ("device_batteryLevelCase", .chargingCase),
+        ]
+        return keys.compactMap { key, position in
+            percent(from: properties[key]).map { PeripheralBatteryPart(position: position, percent: $0) }
+        }
+    }
+
+    /// The profiler writes both IDs in hexadecimal, as "0x2014". Beats share
+    /// Apple's Bluetooth vendor ID.
+    static func appleProductID(in properties: [String: Any]) -> Int? {
+        func hex(_ value: Any?) -> Int? {
+            guard let text = string(from: value)?.lowercased() else { return nil }
+            return text.hasPrefix("0x") ? Int(text.dropFirst(2), radix: 16) : Int(text)
+        }
+        guard hex(properties["device_vendorID"]) == 0x004C else { return nil }
+        return hex(properties["device_productID"])
     }
 
     private static func dictionary(from value: Any) -> [String: Any]? {

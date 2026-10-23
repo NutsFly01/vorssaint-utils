@@ -303,6 +303,18 @@ final class SystemMonitor: ObservableObject {
         }
     }
 
+    /// The island's Batteries page asks again for Bluetooth readings when it
+    /// opens; a page opened while sampling is off gets them once it starts.
+    func refreshPeripheralBatteries() {
+        runOnMain { [weak self] in
+            guard let self else { return }
+            self.peripheralBatterySampler.expireBluetoothReadings(olderThan: 20)
+            guard self.peripheralSamplingEnabled else { return }
+            self.peripheralSampleDue = true
+            self.refresh(suppressImmediateGPU: true)
+        }
+    }
+
     func setNotchVisible(_ visible: Bool) {
         runOnMain { [weak self] in
             guard let self, self.notchVisible != visible else { return }

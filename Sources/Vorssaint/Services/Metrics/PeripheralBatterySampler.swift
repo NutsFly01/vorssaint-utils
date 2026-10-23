@@ -79,6 +79,17 @@ final class PeripheralBatterySampler {
         oldRequest?.cancel()
     }
 
+    /// A page opened to read these batteries wants accessories connected
+    /// moments ago, not the reading from up to five minutes before. The next
+    /// sample starts a Bluetooth refresh, at most once per `age`.
+    func expireBluetoothReadings(olderThan age: TimeInterval) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard request == nil, currentTime() - max(bluetoothStartedAt, bluetoothFinishedAt) >= age else { return }
+        bluetoothStartedAt = -.greatestFiniteMagnitude
+        bluetoothFinishedAt = -.greatestFiniteMagnitude
+    }
+
     func sample(now: TimeInterval) -> PeripheralBatterySample {
         lock.lock()
         guard enabled else { lock.unlock(); return PeripheralBatterySample() }

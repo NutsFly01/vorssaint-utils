@@ -593,6 +593,7 @@ struct NotchView: View {
             case .files: NotchFilesView(service: service)
             case .system:
                 NotchSystemView(size: pageSize) { service.showMetric($0) }
+            case .batteries: NotchBatteriesView(size: pageSize)
             // The launcher hands the row its own controls, which a row set
             // here would replace.
             case .tools: QuickLauncherView(notchSize: pageSize)
@@ -830,6 +831,7 @@ extension NotchModule: PanelOrderItem {
         case .captures: return FeatureStrings.recentCaptures(language).title
         case .files: return FeatureStrings.notch(language).files
         case .system: return FeatureStrings.notch(language).system
+        case .batteries: return FeatureStrings.notch(language).batteries
         case .tools: return FeatureStrings.notch(language).tools
         case .scratchpad: return FeatureStrings.scratchpad(language).pageTitle
         case .agents: return FeatureStrings.notchAgents(language).title

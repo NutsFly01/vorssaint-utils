@@ -927,6 +927,26 @@ enum NotchActivityTests {
                && NotchAccessorySupport.symbol(for: .device, name: "Device") == "dot.radiowaves.left.and.right"
                && NotchAccessorySupport.symbol(for: .device, name: "Alex’s Magic Trackpad") == "rectangle.and.hand.point.up.left",
                "model-specific audio symbols preserve other accessory types")
+        suite.expect(NotchAccessorySupport.symbol(for: .mouse, name: "Magic Mouse") == "magicmouse"
+                     && NotchAccessorySupport.symbol(for: .audio, name: "Beats Studio Buds+") == "beats.studiobudsplus"
+                     && NotchAccessorySupport.symbol(for: .audio, name: "Powerbeats Pro") == "beats.powerbeatspro",
+                     "Apple and Beats accessories use their own symbols")
+        let renamed = PeripheralBatteryDevice(id: "pods", name: "Casque de Nizar", percent: 70, kind: .audio,
+                                              parts: [.init(position: .left, percent: 70)], productID: 0x2014)
+        suite.expect(NotchAccessorySupport.glyphs(for: renamed)
+                        == NotchAccessoryGlyphs(device: "airpodspro", left: "airpodpro.left", right: "airpodpro.right",
+                                                chargingCase: "airpodspro.chargingcase.wireless"),
+                     "a renamed accessory keeps its model's symbols through its product ID")
+        suite.expect(AppleAudioModel(productID: 0x2013) == .airPods3 && AppleAudioModel(productID: 0x9999) == nil
+                     && AppleAudioModel(name: "AirPods de Samia") == .airPods && AppleAudioModel(name: "Speaker") == nil,
+                     "models come from known product IDs and names only")
+        let generic = NotchAccessorySupport.glyphs(for: PeripheralBatteryDevice(id: "x", name: "Earbuds", percent: 50, kind: .audio))
+        for glyphs in AppleAudioModel.allCases.map(\.glyphs) + [generic] {
+            for symbol in [glyphs.device, glyphs.left, glyphs.right, glyphs.chargingCase] {
+                suite.expect(NSImage(systemSymbolName: symbol, accessibilityDescription: nil) != nil,
+                             "every model draws its device, sides and case on this macOS version: \(symbol)")
+            }
+        }
         for kind: PeripheralBatteryKind in [.audio, .keyboard, .mouse, .trackpad, .device] {
             let symbol = NotchAccessorySupport.symbol(for: kind, name: "Device")
             suite.expect(NSImage(systemSymbolName: symbol, accessibilityDescription: nil) != nil,
